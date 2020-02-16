@@ -27,7 +27,7 @@ export class CanvasAreaComponent implements OnInit {
   dragable: Rectangle;
   startX: number;
   startY: number;
-  startColor: string;
+  defaultColor: string;
   COLOR: string;
   isRectIntersecting: boolean;
   WARNING_COLOR = 'red';
@@ -51,39 +51,30 @@ export class CanvasAreaComponent implements OnInit {
   initStream() {
     const mouseMoveEvent$ = this.mouseMove$
       .pipe(
-        map((e: MouseEvent) => ({
-          shiftX: e.clientX - this.boundingClient.left,
-          shiftY: e.clientY - this.boundingClient.top,
-          pageX: e.pageX,
-          pageY: e.pageY,
+        map((event: MouseEvent) => ({
+          mousePosition: new Point(event.clientX - this.boundingClient.left, event.clientY - this.boundingClient.top),
         })),
         takeUntil(this.mouseUp$),
         takeUntil(this.mouseOut$)
       );
     const mouseDownEvent$ = this.mouseDown$
       .pipe(
-        map((e: MouseEvent) => ({
-          shiftX: e.clientX - this.boundingClient.left,
-          shiftY: e.clientY - this.boundingClient.top,
+        map((event: MouseEvent) => ({
+          mousePosition: new Point(event.clientX - this.boundingClient.left, event.clientY - this.boundingClient.top),
         }))
       );
     mouseDownEvent$.subscribe((mouseDownValue) => {
-      this.dragable = this.isRectangleDrag(mouseDownValue.shiftX, mouseDownValue.shiftY);
+      this.dragable = this.isRectDraggable(mouseDownValue.mousePosition);
       if (this.dragable) {
-        this.startX = this.dragable.leftTopPoint.x;
-        this.startY = this.dragable.leftTopPoint.y;
-        const SHIFT_X = (this.dragable.leftTopPoint.x - mouseDownValue.shiftX);
-        const SHIFT_Y = (this.dragable.leftTopPoint.y - mouseDownValue.shiftY);
-        this.startColor = this.dragable.color;
+        this.setInfoBeforeDrag();
+        const mouseOffsetX = (this.dragable.leftTopPoint.x - mouseDownValue.mousePosition.x);
+        const mouseOffsetY = (this.dragable.leftTopPoint.y - mouseDownValue.mousePosition.y);
         mouseMoveEvent$.subscribe((mouseMoveValue) => {
-          const startX = this.dragable.leftTopPoint.x;
-          const startY = this.dragable.leftTopPoint.y;
-          const mousePosition = new Point(mouseMoveValue.shiftX + SHIFT_X, mouseMoveValue.shiftY + SHIFT_Y);
-          this.dragable.setLeftTopPoint(mousePosition);
-          this.intersectValidation(this.startColor);
-          this.clear(startX, startY);
+          const mouseCentredPosition = new Point(mouseMoveValue.mousePosition.x + mouseOffsetX, mouseMoveValue.mousePosition.y + mouseOffsetY);
+          this.clear(this.dragable.leftTopPoint.x, this.dragable.leftTopPoint.y);
+          this.dragable.setLeftTopPoint(mouseCentredPosition);
+          this.intersectValidation(this.defaultColor);
           this.draw();
-          console.log(this.dragable.leftTopPoint, this.dragable.rightBotPoint);
         });
       }
     });
@@ -95,27 +86,36 @@ export class CanvasAreaComponent implements OnInit {
         if (this.isRectIntersecting) {
           this.intersect.color = this.COLOR;
           this.dragable.setLeftTopPoint(new Point(this.startX, this.startY));
-          this.dragable.color = this.startColor;
+          this.dragable.color = this.defaultColor;
         }
         this.draw();
       }
     });
   }
 
-  isIntersectByPoints = (draggable: Rectangle, area: Rectangle): boolean => {
-    const x1y1 = this.isPointIntersect(draggable.leftTopPoint, area.leftBotPoint, area.rightTopPoint);
-    const x2y1 = this.isPointIntersect(draggable.rightTopPoint, area.leftBotPoint, area.rightTopPoint);
-    const x1y2 = this.isPointIntersect(draggable.leftBotPoint, area.leftBotPoint, area.rightTopPoint);
-    const x2y2 = this.isPointIntersect(draggable.rightBotPoint, area.leftBotPoint, area.rightTopPoint);
-    const ix1y1 = this.isPointIntersect(area.leftTopPoint, draggable.leftBotPoint, draggable.rightTopPoint);
-    const ix2y1 = this.isPointIntersect(area.rightTopPoint, draggable.leftBotPoint, draggable.rightTopPoint);
-    const ix1y2 = this.isPointIntersect(area.leftBotPoint, draggable.leftBotPoint, draggable.rightTopPoint);
-    const ix2y2 = this.isPointIntersect(area.rightBotPoint, draggable.leftBotPoint, draggable.rightTopPoint);
+  setInfoBeforeDrag = () => {
+    this.startX = this.dragable.leftTopPoint.x;
+    this.startY = this.dragable.leftTopPoint.y;
+    this.defaultColor = this.dragable.color;
+  }
+
+  isIntersectByPoints = (draggable: Rectangle, intersect: Rectangle): boolean => {
+    const intersectDiagonal = new Line(intersect.leftBotPoint, intersect.rightTopPoint);
+    const draggableDiagonal = new Line(draggable.leftBotPoint, draggable.rightTopPoint);
+    const x1y1 = this.isPointIntersect(draggable.leftTopPoint, intersectDiagonal);
+    const x2y1 = this.isPointIntersect(draggable.rightTopPoint, intersectDiagonal);
+    const x1y2 = this.isPointIntersect(draggable.leftBotPoint, intersectDiagonal);
+    const x2y2 = this.isPointIntersect(draggable.rightBotPoint, intersectDiagonal);
+    const ix1y1 = this.isPointIntersect(intersect.leftTopPoint, draggableDiagonal);
+    const ix2y1 = this.isPointIntersect(intersect.rightTopPoint, draggableDiagonal);
+    const ix1y2 = this.isPointIntersect(intersect.leftBotPoint, draggableDiagonal);
+    const ix2y2 = this.isPointIntersect(intersect.rightBotPoint, draggableDiagonal);
     return x1y1 || x1y2 || x2y1 || x2y2 || ix1y1 || ix1y2 || ix2y1 || ix2y2;
   }
 
-  isPointIntersect = (draggable: Point, leftBotPoint: Point, rightTopPoint: Point): boolean => {
-    return draggable.x > leftBotPoint.x && draggable.x < rightTopPoint.x && draggable.y > rightTopPoint.y && draggable.y < leftBotPoint.y;
+  isPointIntersect = (draggable: Point, intersectDiagonal: Line): boolean => {
+    return draggable.x > intersectDiagonal.startPosition.x && draggable.x < intersectDiagonal.endPosition.x &&
+      draggable.y > intersectDiagonal.endPosition.y && draggable.y < intersectDiagonal.startPosition.y;
   }
 
 
@@ -180,14 +180,6 @@ export class CanvasAreaComponent implements OnInit {
     }
   }
 
-  // setDiractionForSnapped = (first: number, second: number, third: number, fourth: number) => {
-  //   if (this.getDistanceBetweenPoints(first, second) < this.getDistanceBetweenPoints(third, fourth)) {
-  //     this.dragable.setLeftTopPoint(new Point(i.rightTopPoint.x, first));
-  //   } else {
-  //     this.dragable.setLeftTopPoint(new Point(i.rightTopPoint.x, third - this.dragable.height));
-  //   }
-  // }
-
   getDirectionToSnap = (i: Rectangle): string => {
     const obj = {
       left: this.getDistanceBetweenPoints(i.leftTopPoint.x, this.dragable.rightTopPoint.x),
@@ -195,16 +187,15 @@ export class CanvasAreaComponent implements OnInit {
       top: this.getDistanceBetweenPoints(i.leftTopPoint.y, this.dragable.leftBotPoint.y),
       bottom: this.getDistanceBetweenPoints(i.leftBotPoint.y, this.dragable.leftTopPoint.y)
     };
-    const min = Math.min(...Object.values(obj));
-    return this.getKeyByValue(obj, min);
+    return this.getKeyByValue(obj, Math.min(...Object.values(obj)));
   }
 
   getKeyByValue = (object, value): string => {
     return Object.keys(object).find(key => object[key] === value);
   }
 
-  getDistanceBetweenPoints = (draggablePoint: number, intersectablePoint: number): number => {
-    return Math.abs(draggablePoint - intersectablePoint);
+  getDistanceBetweenPoints = (dragPoint: number, intersectPoint: number): number => {
+    return Math.abs(dragPoint - intersectPoint);
   }
 
   changeColor = (intersectRect: Rectangle, startColor: string) => {
@@ -223,18 +214,20 @@ export class CanvasAreaComponent implements OnInit {
     this.intersect = intersectRect;
   }
 
-  isRectangleDrag = (offsetX: number, offsetY: number) =>
-    this.rects.find((i: Rectangle) => offsetX > i.leftTopPoint.x && offsetX < i.rightTopPoint.x && offsetY > i.leftTopPoint.y && offsetY < i.leftBotPoint.y)
+  isRectDraggable = (mousePosition: Point) =>
+    this.rects.find((i: Rectangle) =>
+      mousePosition.x > i.leftTopPoint.x && mousePosition.x < i.rightTopPoint.x && mousePosition.y > i.leftTopPoint.y && mousePosition.y < i.leftBotPoint.y)
 
   addRects = () => {
     this.rects.push(new Rectangle(new Point(500, 355), 80, 80, '#ff550d'));
-    this.rects.push(new Rectangle(new Point(500, 155), 80, 80, '#444444'));
+    this.rects.push(new Rectangle(new Point(500, 155), 280, 80, '#444444'));
+    this.rects.push(new Rectangle(new Point(600, 255), 80, 380, 'blue'));
   }
 
-  drawRect = (r: Rectangle) => {
+  drawRect = (rect: Rectangle) => {
     this.ctx.beginPath();
-    this.ctx.fillStyle = r.color;
-    this.ctx.fillRect(r.leftTopPoint.x, r.leftTopPoint.y, r.width, r.height);
+    this.ctx.fillStyle = rect.color;
+    this.ctx.fillRect(rect.leftTopPoint.x, rect.leftTopPoint.y, rect.width, rect.height);
     this.ctx.closePath();
   }
 
