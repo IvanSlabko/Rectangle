@@ -1,4 +1,4 @@
-import {Point} from '../canvas-area/Point';
+import {Point} from './Point';
 
 export class Rectangle {
   public leftBotPoint: Point;
@@ -14,7 +14,7 @@ export class Rectangle {
     this.currentColor = defaultColor;
   }
 
-  setPoints = (changedPoint: Point) => {
+  setPosition = (changedPoint: Point) => {
     this.leftTopPoint = changedPoint;
     this.rightTopPoint.x = changedPoint.x + this.width;
     this.rightTopPoint.y = changedPoint.y;
