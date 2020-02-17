@@ -29,6 +29,9 @@ export class CanvasAreaComponent implements OnInit {
   WARNING_COLOR = 'red';
   SNAP_CONST = 10;
   NEGATIVE_SIGN = -1;
+  DEFAULT_X_POSITION = 30;
+  DEFAULT_Y_POSITION = 30;
+  DISTANCE_BETWEEN_RECTS = 20;
 
   ngOnInit(): void {
     this.canvasElement = this.canvas.nativeElement;
@@ -44,6 +47,16 @@ export class CanvasAreaComponent implements OnInit {
     this.draw();
     this.initStream();
   }
+
+  addRects = () => {
+    this.rects = [
+      new Rectangle(80, 80, '#ff550d'),
+      new Rectangle(80, 180, '#444444'),
+      new Rectangle(280, 80, '#444444'),
+      new Rectangle(80, 280, '#1A2044')
+    ];
+    this.setDefaultPosition();
+  };
 
   initStream() {
     const mouseMoveEvent$ = this.mouseMove$
@@ -140,7 +153,8 @@ export class CanvasAreaComponent implements OnInit {
     const areaStartPoint = new Point(intersect.leftTopPoint.x - this.SNAP_CONST, intersect.leftTopPoint.y - this.SNAP_CONST);
     const areaWidth = intersect.width + this.SNAP_CONST * 2;
     const areaHeight = intersect.height + this.SNAP_CONST * 2;
-    const area = new Rectangle(areaStartPoint, areaWidth, areaHeight);
+    const area = new Rectangle(areaWidth, areaHeight);
+    area.setPosition(areaStartPoint);
     return this.isIntersectByPoints(this.draggable, area);
   };
 
@@ -197,13 +211,12 @@ export class CanvasAreaComponent implements OnInit {
     this.rects.find((intersect: Rectangle) =>
       mousePosition.x > intersect.leftTopPoint.x && mousePosition.x < intersect.rightTopPoint.x && mousePosition.y > intersect.leftTopPoint.y && mousePosition.y < intersect.leftBotPoint.y);
 
-  addRects = () => {
-    this.rects = [
-      new Rectangle(new Point(500, 155), 80, 80, '#ff550d'),
-      new Rectangle(new Point(500, 255), 80, 80, '#444444'),
-      new Rectangle(new Point(500, 355), 280, 80, '#444444'),
-      new Rectangle(new Point(500, 455), 80, 380, '#1A2044')
-    ];
+  setDefaultPosition = () => {
+    this.rects.forEach((rect: Rectangle) => {
+      this.DEFAULT_Y_POSITION += this.DISTANCE_BETWEEN_RECTS;
+      rect.setPosition(new Point(this.DEFAULT_X_POSITION, this.DEFAULT_Y_POSITION));
+      this.DEFAULT_Y_POSITION += rect.height;
+    });
   };
 
   drawRect = (rect: Rectangle) => {
