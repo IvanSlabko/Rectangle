@@ -2,9 +2,8 @@ import {Component, ElementRef, OnInit, ViewChild} from '@angular/core';
 
 import {fromEvent, Observable} from 'rxjs';
 import {map, takeUntil} from 'rxjs/operators';
-import {Rectangle} from '../rectangle/Rectangle';
-import {Point} from './Point';
-import {Line} from './Line';
+import {Rectangle} from '../entities/Rectangle';
+import {Point} from '../entities/Point';
 
 @Component({
   selector: 'app-canvas-area',
@@ -23,15 +22,13 @@ export class CanvasAreaComponent implements OnInit {
   mouseMove$: Observable<Event>;
   mouseUp$: Observable<Event>;
   mouseOut$: Observable<Event>;
-  intersect: Rectangle;
-  dragable: Rectangle;
+  draggable: Rectangle;
   startX: number;
   startY: number;
-  defaultColor: string;
-  COLOR: string;
   isRectIntersecting: boolean;
   WARNING_COLOR = 'red';
   SNAP_CONST = 10;
+  NEGATIVE_SIGN = -1;
 
   ngOnInit(): void {
     this.canvasElement = this.canvas.nativeElement;
@@ -64,29 +61,32 @@ export class CanvasAreaComponent implements OnInit {
         }))
       );
     mouseDownEvent$.subscribe((mouseDownValue) => {
-      this.dragable = this.isRectDraggable(mouseDownValue.mousePosition);
-      if (this.dragable) {
+      this.draggable = this.isRectDraggable(mouseDownValue.mousePosition);
+      if (this.draggable) {
         this.setInfoBeforeDrag();
-        const mouseOffsetX = (this.dragable.leftTopPoint.x - mouseDownValue.mousePosition.x);
-        const mouseOffsetY = (this.dragable.leftTopPoint.y - mouseDownValue.mousePosition.y);
+        const mouseOffsetX = (this.draggable.leftTopPoint.x - mouseDownValue.mousePosition.x);
+        const mouseOffsetY = (this.draggable.leftTopPoint.y - mouseDownValue.mousePosition.y);
         mouseMoveEvent$.subscribe((mouseMoveValue) => {
           const mouseCentredPosition = new Point(mouseMoveValue.mousePosition.x + mouseOffsetX, mouseMoveValue.mousePosition.y + mouseOffsetY);
-          this.clear(this.dragable.leftTopPoint.x, this.dragable.leftTopPoint.y);
-          this.dragable.setLeftTopPoint(mouseCentredPosition);
-          this.intersectValidation(this.defaultColor);
+          this.clear(this.draggable.leftTopPoint.x, this.draggable.leftTopPoint.y);
+          this.draggable.setPosition(mouseCentredPosition);
+          this.intersectChecking();
           this.draw();
         });
       }
     });
+    this.initMouseUpStream();
+  }
+
+  initMouseUpStream() {
     const mouseUpEvent$ = this.mouseUp$;
     mouseUpEvent$.subscribe(() => {
-      if (this.dragable) {
+      if (this.draggable) {
         this.snapShapes();
-        this.clear(this.dragable.leftTopPoint.x, this.dragable.leftTopPoint.y);
+        this.clear(this.draggable.leftTopPoint.x, this.draggable.leftTopPoint.y);
         if (this.isRectIntersecting) {
-          this.intersect.color = this.COLOR;
-          this.dragable.setLeftTopPoint(new Point(this.startX, this.startY));
-          this.dragable.color = this.defaultColor;
+          this.draggable.setPosition(new Point(this.startX, this.startY));
+          this.intersectChecking();
         }
         this.draw();
       }
@@ -94,149 +94,131 @@ export class CanvasAreaComponent implements OnInit {
   }
 
   setInfoBeforeDrag = () => {
-    this.startX = this.dragable.leftTopPoint.x;
-    this.startY = this.dragable.leftTopPoint.y;
-    this.defaultColor = this.dragable.color;
-  }
+    this.startX = this.draggable.leftTopPoint.x;
+    this.startY = this.draggable.leftTopPoint.y;
+  };
 
   isIntersectByPoints = (draggable: Rectangle, intersect: Rectangle): boolean => {
-    const intersectDiagonal = new Line(intersect.leftBotPoint, intersect.rightTopPoint);
-    const draggableDiagonal = new Line(draggable.leftBotPoint, draggable.rightTopPoint);
-    const x1y1 = this.isPointIntersect(draggable.leftTopPoint, intersectDiagonal);
-    const x2y1 = this.isPointIntersect(draggable.rightTopPoint, intersectDiagonal);
-    const x1y2 = this.isPointIntersect(draggable.leftBotPoint, intersectDiagonal);
-    const x2y2 = this.isPointIntersect(draggable.rightBotPoint, intersectDiagonal);
-    const ix1y1 = this.isPointIntersect(intersect.leftTopPoint, draggableDiagonal);
-    const ix2y1 = this.isPointIntersect(intersect.rightTopPoint, draggableDiagonal);
-    const ix1y2 = this.isPointIntersect(intersect.leftBotPoint, draggableDiagonal);
-    const ix2y2 = this.isPointIntersect(intersect.rightBotPoint, draggableDiagonal);
-    return x1y1 || x1y2 || x2y1 || x2y2 || ix1y1 || ix1y2 || ix2y1 || ix2y2;
-  }
+    return this.isPointIntersect(draggable.leftTopPoint.x, draggable.rightTopPoint.x, intersect.leftTopPoint.x, intersect.rightTopPoint.x)
+      && this.isPointIntersect(draggable.leftTopPoint.y, draggable.rightBotPoint.y, intersect.leftTopPoint.y, intersect.rightBotPoint.y);
+  };
 
-  isPointIntersect = (draggable: Point, intersectDiagonal: Line): boolean => {
-    return draggable.x > intersectDiagonal.startPosition.x && draggable.x < intersectDiagonal.endPosition.x &&
-      draggable.y > intersectDiagonal.endPosition.y && draggable.y < intersectDiagonal.startPosition.y;
-  }
+  isPointIntersect = (dragX1: number, dragX2: number, intersectX3: number, intersectX4: number) => {
+    return this.isPointBelongsLine(dragX1, intersectX3, intersectX4) || this.isPointBelongsLine(dragX2, intersectX3, intersectX4) ||
+      this.isPointBelongsLine(intersectX3, dragX1, dragX2) || this.isPointBelongsLine(intersectX4, dragX1, dragX2);
+  };
 
+  isPointBelongsLine = (pointPosition: number, startLine: number, endLine: number): boolean => {
+    return (pointPosition - startLine) * (pointPosition - endLine) < 0;
+  };
 
-  intersectValidation = (startColor: string) => {
-    const intersectRect: Rectangle = this.rects.find((i: Rectangle) => (this.isIntersectByPoints(this.dragable, i)));
-    this.changeColor(intersectRect, startColor);
-  }
+  intersectChecking = () => {
+    this.draggable.currentColor = this.draggable.defaultColor;
+    this.isRectIntersecting = false;
+    this.rects.forEach((rect: Rectangle) => {
+      if (this.isIntersectByPoints(this.draggable, rect)) {
+        this.isRectIntersecting = true;
+        rect.currentColor = this.WARNING_COLOR;
+        this.draggable.currentColor = this.WARNING_COLOR;
+      } else if (this.draggable !== rect) {
+        rect.currentColor = rect.defaultColor;
+      }
+    });
+  };
 
   snapShapes = () => {
-    const filter = this.rects.filter(rect => rect !== this.dragable);
-    for (const i of filter) {
-      if (this.isInAreaForSnap(i)) {
-        const direction = this.getDirectionToSnap(i);
-        this.snapRectangles(direction, i);
+    const filterRects = this.rects.filter(rect => rect !== this.draggable);
+    for (const rect of filterRects) {
+      if (this.isInAreaForSnap(rect)) {
+        const direction = this.getDirectionToSnap(rect);
+        this.snapRectangles(direction, rect);
       }
     }
-  }
+  };
 
-  isInAreaForSnap = (i: Rectangle): boolean => {
-    const areaStartPoint = new Point(i.leftTopPoint.x - this.SNAP_CONST, i.leftTopPoint.y - this.SNAP_CONST);
-    const areaWidth = i.width + this.SNAP_CONST * 2;
-    const areaHeight = i.height + this.SNAP_CONST * 2;
+  isInAreaForSnap = (intersect: Rectangle): boolean => {
+    const areaStartPoint = new Point(intersect.leftTopPoint.x - this.SNAP_CONST, intersect.leftTopPoint.y - this.SNAP_CONST);
+    const areaWidth = intersect.width + this.SNAP_CONST * 2;
+    const areaHeight = intersect.height + this.SNAP_CONST * 2;
     const area = new Rectangle(areaStartPoint, areaWidth, areaHeight);
-    return this.isIntersectByPoints(this.dragable, area);
-  }
+    return this.isIntersectByPoints(this.draggable, area);
+  };
 
-  snapRectangles = (direction: string, i: Rectangle) => {
-    this.clear(this.dragable.leftTopPoint.x, this.dragable.leftTopPoint.y);
+  snapRectangles = (direction: string, intersect: Rectangle) => {
+    this.clear(this.draggable.leftTopPoint.x, this.draggable.leftTopPoint.y);
     switch (direction) {
       case 'top': {
-        if (this.getDistanceBetweenPoints(i.leftTopPoint.x, this.dragable.rightTopPoint.x) < this.getDistanceBetweenPoints(i.rightTopPoint.x, this.dragable.leftTopPoint.x)) {
-          this.dragable.setLeftTopPoint(new Point(i.leftTopPoint.x, i.leftTopPoint.y - this.dragable.height));
-        } else {
-          this.dragable.setLeftTopPoint(new Point(i.rightTopPoint.x - this.dragable.width, i.leftTopPoint.y - this.dragable.height));
-        }
+        this.alignRect(intersect.leftTopPoint.x, intersect.leftTopPoint.y - this.draggable.height,
+          intersect.rightTopPoint.x - this.draggable.width, intersect.leftTopPoint.y - this.draggable.height);
         break;
       }
       case 'bottom': {
-        if (this.getDistanceBetweenPoints(i.leftTopPoint.x, this.dragable.rightTopPoint.x) < this.getDistanceBetweenPoints(i.rightTopPoint.x, this.dragable.leftTopPoint.x)) {
-          this.dragable.setLeftTopPoint(new Point(i.leftTopPoint.x, i.leftBotPoint.y));
-        } else {
-          this.dragable.setLeftTopPoint(new Point(i.rightTopPoint.x - this.dragable.width, i.leftBotPoint.y));
-        }
+        this.alignRect(intersect.leftTopPoint.x, intersect.leftBotPoint.y,
+          intersect.rightTopPoint.x - this.draggable.width, intersect.leftBotPoint.y);
         break;
       }
       case 'left': {
-        if (this.getDistanceBetweenPoints(i.leftTopPoint.y, this.dragable.leftBotPoint.y) < this.getDistanceBetweenPoints(i.leftBotPoint.y, this.dragable.leftTopPoint.y)) {
-          this.dragable.setLeftTopPoint(new Point(i.leftTopPoint.x - this.dragable.width, i.leftTopPoint.y));
-        } else {
-          this.dragable.setLeftTopPoint(new Point(i.leftTopPoint.x - this.dragable.width, i.leftBotPoint.y - this.dragable.height));
-        }
+        this.alignRect(intersect.leftTopPoint.x - this.draggable.width, intersect.leftTopPoint.y,
+          intersect.leftTopPoint.x - this.draggable.width, intersect.leftBotPoint.y - this.draggable.height);
         break;
       }
       case 'right': {
-        if (this.getDistanceBetweenPoints(i.leftTopPoint.y, this.dragable.leftBotPoint.y) < this.getDistanceBetweenPoints(i.leftBotPoint.y, this.dragable.leftTopPoint.y)) {
-          this.dragable.setLeftTopPoint(new Point(i.rightTopPoint.x, i.leftTopPoint.y));
-        } else {
-          this.dragable.setLeftTopPoint(new Point(i.rightTopPoint.x, i.leftBotPoint.y - this.dragable.height));
-        }
+        this.alignRect(intersect.rightTopPoint.x, intersect.leftTopPoint.y,
+          intersect.rightTopPoint.x, intersect.leftBotPoint.y - this.draggable.height);
         break;
       }
     }
-  }
+  };
 
-  getDirectionToSnap = (i: Rectangle): string => {
+  alignRect = (newX1: number, newY1: number, newX2: number, newY2: number) => {
+    if (Math.sign(Math.abs(this.draggable.leftTopPoint.x - newX1 + this.draggable.leftTopPoint.y - newY1) -
+      Math.abs(this.draggable.leftTopPoint.x - newX2 + this.draggable.leftTopPoint.y - newY2)) === this.NEGATIVE_SIGN) {
+      this.draggable.setPosition(new Point(newX1, newY1));
+    } else {
+      this.draggable.setPosition(new Point(newX2, newY2));
+    }
+  };
+
+  getDirectionToSnap = (intersect: Rectangle): string => {
     const obj = {
-      left: this.getDistanceBetweenPoints(i.leftTopPoint.x, this.dragable.rightTopPoint.x),
-      right: this.getDistanceBetweenPoints(i.rightTopPoint.x, this.dragable.leftTopPoint.x),
-      top: this.getDistanceBetweenPoints(i.leftTopPoint.y, this.dragable.leftBotPoint.y),
-      bottom: this.getDistanceBetweenPoints(i.leftBotPoint.y, this.dragable.leftTopPoint.y)
+      left: Math.abs(intersect.leftTopPoint.x - this.draggable.rightTopPoint.x),
+      right: Math.abs(intersect.rightTopPoint.x - this.draggable.leftTopPoint.x),
+      top: Math.abs(intersect.leftTopPoint.y - this.draggable.leftBotPoint.y),
+      bottom: Math.abs(intersect.leftBotPoint.y - this.draggable.leftTopPoint.y)
     };
     return this.getKeyByValue(obj, Math.min(...Object.values(obj)));
-  }
+  };
 
   getKeyByValue = (object, value): string => {
     return Object.keys(object).find(key => object[key] === value);
-  }
-
-  getDistanceBetweenPoints = (dragPoint: number, intersectPoint: number): number => {
-    return Math.abs(dragPoint - intersectPoint);
-  }
-
-  changeColor = (intersectRect: Rectangle, startColor: string) => {
-    if (this.intersect) {
-      this.intersect.color = this.COLOR;
-    }
-    if (intersectRect) {
-      this.COLOR = intersectRect.color;
-      this.dragable.color = this.WARNING_COLOR;
-      intersectRect.color = this.WARNING_COLOR;
-      this.isRectIntersecting = true;
-    } else {
-      this.dragable.color = startColor;
-      this.isRectIntersecting = false;
-    }
-    this.intersect = intersectRect;
-  }
+  };
 
   isRectDraggable = (mousePosition: Point) =>
-    this.rects.find((i: Rectangle) =>
-      mousePosition.x > i.leftTopPoint.x && mousePosition.x < i.rightTopPoint.x && mousePosition.y > i.leftTopPoint.y && mousePosition.y < i.leftBotPoint.y)
+    this.rects.find((intersect: Rectangle) =>
+      mousePosition.x > intersect.leftTopPoint.x && mousePosition.x < intersect.rightTopPoint.x && mousePosition.y > intersect.leftTopPoint.y && mousePosition.y < intersect.leftBotPoint.y);
 
   addRects = () => {
-    this.rects.push(new Rectangle(new Point(500, 355), 80, 80, '#ff550d'));
-    this.rects.push(new Rectangle(new Point(500, 155), 280, 80, '#444444'));
-    this.rects.push(new Rectangle(new Point(600, 255), 80, 380, 'blue'));
-  }
+    this.rects = [
+      new Rectangle(new Point(500, 155), 80, 80, '#ff550d'),
+      new Rectangle(new Point(500, 255), 80, 80, '#444444'),
+      new Rectangle(new Point(500, 355), 280, 80, '#444444'),
+      new Rectangle(new Point(500, 455), 80, 380, '#1A2044')
+    ];
+  };
 
   drawRect = (rect: Rectangle) => {
     this.ctx.beginPath();
-    this.ctx.fillStyle = rect.color;
+    this.ctx.fillStyle = rect.currentColor;
     this.ctx.fillRect(rect.leftTopPoint.x, rect.leftTopPoint.y, rect.width, rect.height);
     this.ctx.closePath();
-  }
+  };
 
   clear(x: number, y: number) {
-    this.ctx.clearRect(x, y, this.dragable.width, this.dragable.height);
+    this.ctx.clearRect(x, y, this.draggable.width, this.draggable.height);
   }
 
   draw = () => {
-    this.rects.forEach(r => this.drawRect(r));
-  }
+    this.rects.forEach(rect => this.drawRect(rect));
+  };
 
 }
