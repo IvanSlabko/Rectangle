@@ -111,25 +111,11 @@ export class CanvasAreaComponent implements OnInit {
     this.startY = this.draggable.leftTopPoint.y;
   };
 
-  isIntersectByPoints = (draggable: Rectangle, intersect: Rectangle): boolean => {
-    return this.isPointIntersect(draggable.leftTopPoint.x, draggable.rightTopPoint.x, intersect.leftTopPoint.x, intersect.rightTopPoint.x)
-      && this.isPointIntersect(draggable.leftTopPoint.y, draggable.rightBotPoint.y, intersect.leftTopPoint.y, intersect.rightBotPoint.y);
-  };
-
-  isPointIntersect = (dragX1: number, dragX2: number, intersectX3: number, intersectX4: number) => {
-    return this.isPointBelongsLine(dragX1, intersectX3, intersectX4) || this.isPointBelongsLine(dragX2, intersectX3, intersectX4) ||
-      this.isPointBelongsLine(intersectX3, dragX1, dragX2) || this.isPointBelongsLine(intersectX4, dragX1, dragX2);
-  };
-
-  isPointBelongsLine = (pointPosition: number, startLine: number, endLine: number): boolean => {
-    return (pointPosition - startLine) * (pointPosition - endLine) < 0;
-  };
-
   intersectChecking = () => {
     this.draggable.currentColor = this.draggable.defaultColor;
     this.isRectIntersecting = false;
     this.rects.forEach((rect: Rectangle) => {
-      if (this.isIntersectByPoints(this.draggable, rect)) {
+      if (rect.isIntersectByPoints(this.draggable)) {
         this.isRectIntersecting = true;
         rect.currentColor = this.WARNING_COLOR;
         this.draggable.currentColor = this.WARNING_COLOR;
@@ -143,7 +129,7 @@ export class CanvasAreaComponent implements OnInit {
     const filterRects = this.rects.filter(rect => rect !== this.draggable);
     for (const rect of filterRects) {
       if (this.isInAreaForSnap(rect)) {
-        const direction = this.getDirectionToSnap(rect);
+        const direction = rect.getDirectionToSnap(this.draggable);
         this.snapRectangles(direction, rect);
       }
     }
@@ -155,7 +141,7 @@ export class CanvasAreaComponent implements OnInit {
     const areaHeight = intersect.height + this.SNAP_CONST * 2;
     const area = new Rectangle(areaWidth, areaHeight);
     area.setPosition(areaStartPoint);
-    return this.isIntersectByPoints(this.draggable, area);
+    return area.isIntersectByPoints(this.draggable);
   };
 
   snapRectangles = (direction: string, intersect: Rectangle) => {
@@ -191,20 +177,6 @@ export class CanvasAreaComponent implements OnInit {
     } else {
       this.draggable.setPosition(new Point(newX2, newY2));
     }
-  };
-
-  getDirectionToSnap = (intersect: Rectangle): string => {
-    const obj = {
-      left: Math.abs(intersect.leftTopPoint.x - this.draggable.rightTopPoint.x),
-      right: Math.abs(intersect.rightTopPoint.x - this.draggable.leftTopPoint.x),
-      top: Math.abs(intersect.leftTopPoint.y - this.draggable.leftBotPoint.y),
-      bottom: Math.abs(intersect.leftBotPoint.y - this.draggable.leftTopPoint.y)
-    };
-    return this.getKeyByValue(obj, Math.min(...Object.values(obj)));
-  };
-
-  getKeyByValue = (object, value): string => {
-    return Object.keys(object).find(key => object[key] === value);
   };
 
   isRectDraggable = (mousePosition: Point) =>

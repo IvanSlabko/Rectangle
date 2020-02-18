@@ -7,7 +7,7 @@ export class Rectangle {
   public rightBotPoint: Point;
   public currentColor: string;
 
-  constructor(public width: number, public height: number,
+  constructor(public width?: number, public height?: number,
               public defaultColor?: string) {
     this.leftTopPoint = new Point();
     this.rightTopPoint = new Point();
@@ -25,5 +25,25 @@ export class Rectangle {
     this.rightBotPoint.x = newPoint.x + this.width;
     this.rightBotPoint.y = newPoint.y + this.height;
   }
+
+  isIntersectByPoints = (draggable: Rectangle): boolean => {
+    const point = new Point();
+    return point.isPointIntersect(draggable.leftTopPoint.x, draggable.rightTopPoint.x, this.leftTopPoint.x, this.rightTopPoint.x)
+      && point.isPointIntersect(draggable.leftTopPoint.y, draggable.rightBotPoint.y, this.leftTopPoint.y, this.rightBotPoint.y);
+  };
+
+  getDirectionToSnap = (draggable: Rectangle): string => {
+    const obj = {
+      left: Math.abs(this.leftTopPoint.x - draggable.rightTopPoint.x),
+      right: Math.abs(this.rightTopPoint.x - draggable.leftTopPoint.x),
+      top: Math.abs(this.leftTopPoint.y - draggable.leftBotPoint.y),
+      bottom: Math.abs(this.leftBotPoint.y - draggable.leftTopPoint.y)
+    };
+    return this.getKeyByValue(obj, Math.min(...Object.values(obj)));
+  };
+
+  getKeyByValue = (object, value): string => {
+    return Object.keys(object).find(key => object[key] === value);
+  };
 
 }
