@@ -6,6 +6,7 @@ export class Rectangle {
   public rightTopPoint: Point;
   public rightBotPoint: Point;
   public currentColor: string;
+  SNAP_DISTANCE = 10;
 
   constructor(public width?: number, public height?: number,
               public defaultColor?: string) {
@@ -24,7 +25,7 @@ export class Rectangle {
     this.leftBotPoint.y = newPoint.y + this.height;
     this.rightBotPoint.x = newPoint.x + this.width;
     this.rightBotPoint.y = newPoint.y + this.height;
-  }
+  };
 
   isIntersectByPoints = (draggable: Rectangle): boolean => {
     const point = new Point();
@@ -45,5 +46,17 @@ export class Rectangle {
   getKeyByValue = (object, value): string => {
     return Object.keys(object).find(key => object[key] === value);
   };
+
+  isInAreaForSnap = (draggable: Rectangle): boolean => {
+    const areaStartPoint = new Point(this.leftTopPoint.x - this.SNAP_DISTANCE, this.leftTopPoint.y - this.SNAP_DISTANCE);
+    const areaWidth = this.width + this.SNAP_DISTANCE * 2;
+    const areaHeight = this.height + this.SNAP_DISTANCE * 2;
+    const area = new Rectangle(areaWidth, areaHeight);
+    area.setPosition(areaStartPoint);
+    return area.isIntersectByPoints(draggable);
+  };
+
+  isPointInRectArea = (point: Point): boolean =>
+    point.x > this.leftTopPoint.x && point.x < this.rightTopPoint.x && point.y > this.leftTopPoint.y && point.y < this.leftBotPoint.y
 
 }
