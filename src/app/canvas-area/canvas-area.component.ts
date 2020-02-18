@@ -1,7 +1,7 @@
 import {Component, ElementRef, OnInit, ViewChild} from '@angular/core';
 
 import {fromEvent, Observable} from 'rxjs';
-import {map, takeUntil} from 'rxjs/operators';
+import {filter, map, takeUntil} from 'rxjs/operators';
 import {Rectangle} from '../entities/Rectangle';
 import {Point} from '../entities/Point';
 
@@ -27,28 +27,27 @@ export class CanvasAreaComponent implements OnInit {
   startY: number;
   isRectIntersecting: boolean;
   WARNING_COLOR = 'red';
-  SNAP_CONST = 10;
   NEGATIVE_SIGN = -1;
   DEFAULT_X_POSITION = 30;
   DEFAULT_Y_POSITION = 30;
   DISTANCE_BETWEEN_RECTS = 20;
 
   ngOnInit(): void {
+    this.initCanvas();
+    this.initRects();
+    this.draw();
+    this.initStreams();
+  }
+
+  initCanvas = () => {
     this.canvasElement = this.canvas.nativeElement;
     this.canvasElement.width = document.body.clientWidth;
     this.canvasElement.height = document.body.clientHeight;
     this.ctx = this.canvas.nativeElement.getContext('2d');
     this.boundingClient = this.canvas.nativeElement.getBoundingClientRect();
-    this.mouseMove$ = fromEvent(this.canvasElement, 'mousemove');
-    this.mouseDown$ = fromEvent(this.canvasElement, 'mousedown');
-    this.mouseUp$ = fromEvent(this.canvasElement, 'mouseup');
-    this.mouseOut$ = fromEvent(this.canvasElement, 'mouseout');
-    this.addRects();
-    this.draw();
-    this.initStream();
   }
 
-  addRects = () => {
+  initRects = () => {
     this.rects = [
       new Rectangle(80, 80, '#ff550d'),
       new Rectangle(80, 180, '#444444'),
@@ -58,7 +57,11 @@ export class CanvasAreaComponent implements OnInit {
     this.setDefaultPosition();
   };
 
-  initStream() {
+  initStreams() {
+    this.mouseMove$ = fromEvent(this.canvasElement, 'mousemove');
+    this.mouseDown$ = fromEvent(this.canvasElement, 'mousedown');
+    this.mouseUp$ = fromEvent(this.canvasElement, 'mouseup');
+    this.mouseOut$ = fromEvent(this.canvasElement, 'mouseout');
     const mouseMoveEvent$ = this.mouseMove$
       .pipe(
         map((event: MouseEvent) => ({
@@ -74,7 +77,7 @@ export class CanvasAreaComponent implements OnInit {
         }))
       );
     mouseDownEvent$.subscribe((mouseDownValue) => {
-      this.draggable = this.isRectDraggable(mouseDownValue.mousePosition);
+      this.initDraggableRect(mouseDownValue.mousePosition);
       if (this.draggable) {
         this.setInfoBeforeDrag();
         const mouseOffsetX = (this.draggable.leftTopPoint.x - mouseDownValue.mousePosition.x);
@@ -88,48 +91,33 @@ export class CanvasAreaComponent implements OnInit {
         });
       }
     });
-    this.initMouseUpStream();
+    this.mouseUp$
+      .pipe(
+        filter(() => !!this.draggable)
+      )
+      .subscribe(this.onMouseUp);
   }
 
-  initMouseUpStream() {
-    const mouseUpEvent$ = this.mouseUp$;
-    mouseUpEvent$.subscribe(() => {
-      if (this.draggable) {
-        this.snapShapes();
-        this.clear(this.draggable.leftTopPoint.x, this.draggable.leftTopPoint.y);
-        if (this.isRectIntersecting) {
-          this.draggable.setPosition(new Point(this.startX, this.startY));
-          this.intersectChecking();
-        }
-        this.draw();
-      }
-    });
-  }
+  onMouseUp = () => {
+    this.snapShapes();
+    this.clear(this.draggable.leftTopPoint.x, this.draggable.leftTopPoint.y);
+    if (this.isRectIntersecting) {
+      this.draggable.setPosition(new Point(this.startX, this.startY));
+      this.intersectChecking();
+    }
+    this.draw();
+  };
 
   setInfoBeforeDrag = () => {
     this.startX = this.draggable.leftTopPoint.x;
     this.startY = this.draggable.leftTopPoint.y;
   };
 
-  isIntersectByPoints = (draggable: Rectangle, intersect: Rectangle): boolean => {
-    return this.isPointIntersect(draggable.leftTopPoint.x, draggable.rightTopPoint.x, intersect.leftTopPoint.x, intersect.rightTopPoint.x)
-      && this.isPointIntersect(draggable.leftTopPoint.y, draggable.rightBotPoint.y, intersect.leftTopPoint.y, intersect.rightBotPoint.y);
-  };
-
-  isPointIntersect = (dragX1: number, dragX2: number, intersectX3: number, intersectX4: number) => {
-    return this.isPointBelongsLine(dragX1, intersectX3, intersectX4) || this.isPointBelongsLine(dragX2, intersectX3, intersectX4) ||
-      this.isPointBelongsLine(intersectX3, dragX1, dragX2) || this.isPointBelongsLine(intersectX4, dragX1, dragX2);
-  };
-
-  isPointBelongsLine = (pointPosition: number, startLine: number, endLine: number): boolean => {
-    return (pointPosition - startLine) * (pointPosition - endLine) < 0;
-  };
-
   intersectChecking = () => {
     this.draggable.currentColor = this.draggable.defaultColor;
     this.isRectIntersecting = false;
     this.rects.forEach((rect: Rectangle) => {
-      if (this.isIntersectByPoints(this.draggable, rect)) {
+      if (rect.isIntersectByPoints(this.draggable)) {
         this.isRectIntersecting = true;
         rect.currentColor = this.WARNING_COLOR;
         this.draggable.currentColor = this.WARNING_COLOR;
@@ -142,20 +130,11 @@ export class CanvasAreaComponent implements OnInit {
   snapShapes = () => {
     const filterRects = this.rects.filter(rect => rect !== this.draggable);
     for (const rect of filterRects) {
-      if (this.isInAreaForSnap(rect)) {
-        const direction = this.getDirectionToSnap(rect);
+      if (rect.isInAreaForSnap(this.draggable)) {
+        const direction = rect.getDirectionToSnap(this.draggable);
         this.snapRectangles(direction, rect);
       }
     }
-  };
-
-  isInAreaForSnap = (intersect: Rectangle): boolean => {
-    const areaStartPoint = new Point(intersect.leftTopPoint.x - this.SNAP_CONST, intersect.leftTopPoint.y - this.SNAP_CONST);
-    const areaWidth = intersect.width + this.SNAP_CONST * 2;
-    const areaHeight = intersect.height + this.SNAP_CONST * 2;
-    const area = new Rectangle(areaWidth, areaHeight);
-    area.setPosition(areaStartPoint);
-    return this.isIntersectByPoints(this.draggable, area);
   };
 
   snapRectangles = (direction: string, intersect: Rectangle) => {
@@ -193,23 +172,9 @@ export class CanvasAreaComponent implements OnInit {
     }
   };
 
-  getDirectionToSnap = (intersect: Rectangle): string => {
-    const obj = {
-      left: Math.abs(intersect.leftTopPoint.x - this.draggable.rightTopPoint.x),
-      right: Math.abs(intersect.rightTopPoint.x - this.draggable.leftTopPoint.x),
-      top: Math.abs(intersect.leftTopPoint.y - this.draggable.leftBotPoint.y),
-      bottom: Math.abs(intersect.leftBotPoint.y - this.draggable.leftTopPoint.y)
-    };
-    return this.getKeyByValue(obj, Math.min(...Object.values(obj)));
+  initDraggableRect = (mousePosition: Point) => {
+    this.draggable = this.rects.find((rect: Rectangle) => rect.isPointInRectArea(mousePosition));
   };
-
-  getKeyByValue = (object, value): string => {
-    return Object.keys(object).find(key => object[key] === value);
-  };
-
-  isRectDraggable = (mousePosition: Point) =>
-    this.rects.find((intersect: Rectangle) =>
-      mousePosition.x > intersect.leftTopPoint.x && mousePosition.x < intersect.rightTopPoint.x && mousePosition.y > intersect.leftTopPoint.y && mousePosition.y < intersect.leftBotPoint.y);
 
   setDefaultPosition = () => {
     this.rects.forEach((rect: Rectangle) => {
