@@ -45,7 +45,7 @@ export class CanvasAreaComponent implements OnInit {
     this.canvasElement.height = document.body.clientHeight;
     this.ctx = this.canvas.nativeElement.getContext('2d');
     this.boundingClient = this.canvas.nativeElement.getBoundingClientRect();
-  }
+  };
 
   initRects = () => {
     this.rects = [
@@ -64,26 +64,26 @@ export class CanvasAreaComponent implements OnInit {
     this.mouseOut$ = fromEvent(this.canvasElement, 'mouseout');
     const mouseMoveEvent$ = this.mouseMove$
       .pipe(
-        map((event: MouseEvent) => ({
-          mousePosition: new Point(event.clientX - this.boundingClient.left, event.clientY - this.boundingClient.top),
-        })),
+        map((event: MouseEvent) =>
+          new Point(event.clientX - this.boundingClient.left, event.clientY - this.boundingClient.top)
+        ),
         takeUntil(this.mouseUp$),
         takeUntil(this.mouseOut$)
       );
     const mouseDownEvent$ = this.mouseDown$
       .pipe(
-        map((event: MouseEvent) => ({
-          mousePosition: new Point(event.clientX - this.boundingClient.left, event.clientY - this.boundingClient.top),
-        }))
+        map((event: MouseEvent) =>
+          new Point(event.clientX - this.boundingClient.left, event.clientY - this.boundingClient.top
+          ))
       );
-    mouseDownEvent$.subscribe((mouseDownValue) => {
-      this.initDraggableRect(mouseDownValue.mousePosition);
+    mouseDownEvent$.subscribe((mouseDownValue: Point) => {
+      this.initDraggableRect(mouseDownValue);
       if (this.draggable) {
         this.setInfoBeforeDrag();
-        const mouseOffsetX = (this.draggable.leftTopPoint.x - mouseDownValue.mousePosition.x);
-        const mouseOffsetY = (this.draggable.leftTopPoint.y - mouseDownValue.mousePosition.y);
-        mouseMoveEvent$.subscribe((mouseMoveValue) => {
-          const mouseCentredPosition = new Point(mouseMoveValue.mousePosition.x + mouseOffsetX, mouseMoveValue.mousePosition.y + mouseOffsetY);
+        const mouseOffsetX = (this.draggable.leftTopPoint.x - mouseDownValue.x);
+        const mouseOffsetY = (this.draggable.leftTopPoint.y - mouseDownValue.y);
+        mouseMoveEvent$.subscribe((mouseMoveValue: Point) => {
+          const mouseCentredPosition = new Point(mouseMoveValue.x + mouseOffsetX, mouseMoveValue.y + mouseOffsetY);
           this.clear(this.draggable.leftTopPoint.x, this.draggable.leftTopPoint.y);
           this.draggable.setPosition(mouseCentredPosition);
           this.intersectChecking();
