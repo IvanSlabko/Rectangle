@@ -27,6 +27,8 @@ export class Rectangle {
     this.rightBotPoint.y = newPoint.y + this.height;
   };
 
+  shiftPosition = (x: number, y: number) => this.setPosition(new Point(this.leftTopPoint.x + x, this.leftTopPoint.y + y));
+
   isIntersectByPoints = (draggable: Rectangle): boolean => {
     const point = new Point();
     return point.isPointIntersect(draggable.leftTopPoint.x, draggable.rightTopPoint.x, this.leftTopPoint.x, this.rightTopPoint.x)
@@ -57,6 +59,6 @@ export class Rectangle {
   };
 
   isPointInRectArea = (point: Point): boolean =>
-    point.x > this.leftTopPoint.x && point.x < this.rightTopPoint.x && point.y > this.leftTopPoint.y && point.y < this.leftBotPoint.y
+    point.x > this.leftTopPoint.x && point.x < this.rightTopPoint.x && point.y > this.leftTopPoint.y && point.y < this.leftBotPoint.y;
 
 }

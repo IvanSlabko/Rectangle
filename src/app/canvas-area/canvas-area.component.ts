@@ -1,7 +1,7 @@
 import {Component, ElementRef, OnInit, ViewChild} from '@angular/core';
 
 import {fromEvent, Observable} from 'rxjs';
-import {filter, map, takeUntil} from 'rxjs/operators';
+import {filter, map, pairwise, takeUntil} from 'rxjs/operators';
 import {Rectangle} from '../entities/Rectangle';
 import {Point} from '../entities/Point';
 
@@ -67,36 +67,32 @@ export class CanvasAreaComponent implements OnInit {
         map((event: MouseEvent) =>
           new Point(event.clientX - this.boundingClient.left, event.clientY - this.boundingClient.top)
         ),
+        pairwise(),
         takeUntil(this.mouseUp$),
         takeUntil(this.mouseOut$)
       );
     const mouseDownEvent$ = this.mouseDown$
       .pipe(
         map((event: MouseEvent) =>
-          new Point(event.clientX - this.boundingClient.left, event.clientY - this.boundingClient.top
-          ))
+          this.getDraggableRect(new Point(event.clientX - this.boundingClient.left, event.clientY - this.boundingClient.top))
+        ),
+        filter((rect: Rectangle) => !!rect)
       );
-    mouseDownEvent$.subscribe((mouseDownValue: Point) => {
-      this.initDraggableRect(mouseDownValue);
-      if (this.draggable) {
-        this.setInfoBeforeDrag();
-        const mouseOffsetX = (this.draggable.leftTopPoint.x - mouseDownValue.x);
-        const mouseOffsetY = (this.draggable.leftTopPoint.y - mouseDownValue.y);
-        mouseMoveEvent$.subscribe((mouseMoveValue: Point) => {
-          const mouseCentredPosition = new Point(mouseMoveValue.x + mouseOffsetX, mouseMoveValue.y + mouseOffsetY);
-          this.clear(this.draggable.leftTopPoint.x, this.draggable.leftTopPoint.y);
-          this.draggable.setPosition(mouseCentredPosition);
-          this.intersectChecking();
-          this.draw();
-        });
-      }
+    mouseDownEvent$.subscribe((rect: Rectangle) => {
+      this.setInfoBeforeDrag(rect);
+      mouseMoveEvent$.subscribe(this.onMouseMove);
     });
     this.mouseUp$
-      .pipe(
-        filter(() => !!this.draggable)
-      )
+      .pipe(filter(() => !!this.draggable))
       .subscribe(this.onMouseUp);
   }
+
+  onMouseMove = (points: Point[]) => {
+    this.clear(this.draggable.leftTopPoint.x, this.draggable.leftTopPoint.y);
+    this.draggable.shiftPosition(points[1].x - points[0].x, points[1].y - points[0].y);
+    this.intersectChecking();
+    this.draw();
+  };
 
   onMouseUp = () => {
     this.snapShapes();
@@ -108,9 +104,10 @@ export class CanvasAreaComponent implements OnInit {
     this.draw();
   };
 
-  setInfoBeforeDrag = () => {
-    this.startX = this.draggable.leftTopPoint.x;
-    this.startY = this.draggable.leftTopPoint.y;
+  setInfoBeforeDrag = (rect: Rectangle) => {
+    this.draggable = rect;
+    this.startX = rect.leftTopPoint.x;
+    this.startY = rect.leftTopPoint.y;
   };
 
   intersectChecking = () => {
@@ -172,9 +169,9 @@ export class CanvasAreaComponent implements OnInit {
     }
   };
 
-  initDraggableRect = (mousePosition: Point) => {
-    this.draggable = this.rects.find((rect: Rectangle) => rect.isPointInRectArea(mousePosition));
-  };
+  getDraggableRect = (mousePosition: Point): Rectangle =>
+    this.rects.find((rect: Rectangle) => rect.isPointInRectArea(mousePosition));
+
 
   setDefaultPosition = () => {
     this.rects.forEach((rect: Rectangle) => {
