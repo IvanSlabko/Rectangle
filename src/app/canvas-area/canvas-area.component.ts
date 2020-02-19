@@ -1,7 +1,7 @@
 import {Component, ElementRef, OnInit, ViewChild} from '@angular/core';
 
 import {fromEvent, Observable} from 'rxjs';
-import {filter, map, pairwise, takeUntil} from 'rxjs/operators';
+import {filter, map, mergeMap, pairwise, takeUntil} from 'rxjs/operators';
 import {Rectangle} from '../entities/Rectangle';
 import {Point} from '../entities/Point';
 
@@ -71,17 +71,19 @@ export class CanvasAreaComponent implements OnInit {
         takeUntil(this.mouseUp$),
         takeUntil(this.mouseOut$)
       );
-    const mouseDownEvent$ = this.mouseDown$
+
+    this.mouseDown$
       .pipe(
         map((event: MouseEvent) =>
           this.getDraggableRect(new Point(event.clientX - this.boundingClient.left, event.clientY - this.boundingClient.top))
         ),
-        filter((rect: Rectangle) => !!rect)
-      );
-    mouseDownEvent$.subscribe((rect: Rectangle) => {
-      this.setInfoBeforeDrag(rect);
-      mouseMoveEvent$.subscribe(this.onMouseMove);
-    });
+        filter((rect: Rectangle) => !!rect),
+        mergeMap((rect: Rectangle) => {
+          this.setInfoBeforeDrag(rect);
+          return mouseMoveEvent$;
+        })
+      ).subscribe(this.onMouseMove);
+
     this.mouseUp$
       .pipe(filter(() => !!this.draggable))
       .subscribe(this.onMouseUp);
